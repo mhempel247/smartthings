@@ -77,7 +77,16 @@ def areLightsOn() {
 	def some_on=0
     def some_off=0
     hues.each { hue ->
-    	if (hue.currentSwitch=="on") {some_on=1} else if (hue.currentSwitch=="off") {some_off=1}
+    	def huestate=hue.currentSwitch
+        log.debug "${hue.displayName}: $huestate" 
+        if (huestate=="on") 
+        {
+        	some_on=1
+        } 
+        else if (huestate=="off") 
+        {
+        	some_off=1
+        }
     }
     if (some_on==1)
     {
@@ -105,8 +114,10 @@ def determineState() {
     def some_on=areLightsOn()
     if (some_on==1)
     {
+    	log.debug "turning all hues off since some seem on"
     	hues.each { hue -> hue.off() }
     }
+    else log.debug "indicated all hues are off"
     
     def s = getSunriseAndSunset(zipCode: zipCode, sunriseOffset: sunriseOffset, sunsetOffset: sunsetOffset)
 	def curr=now()
@@ -127,9 +138,11 @@ def determineState() {
     	state.state_current=state.state_current & (0xffffffff^state.mask_sunlight)
         log.debug "sun is Down!"
  	}   
+    log.trace "1 current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
 }
 def realizeState() {
 	log.debug "realizeState()"
+	log.trace "2 current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
     
 	if ((state.state_current & state.mask_contact)==0)
     {
@@ -162,75 +175,83 @@ def realizeState() {
 }
 def realizeStateChange() {
 	log.debug "realizeStateChange()"
-    log.debug "state change value is ${state.state_changed}"
-    //if the door is now closed, we turn the lights off if they are on
+    log.trace "3 current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+	//if the door is now closed, we turn the lights off if they are on
 	if ((state.state_changed & state.mask_contact)!=0)//the contact sensor state changed
     {
     	log.debug "contact sensor state change"
+        //clear the change flag
+        state.state_changed=state.state_changed & (0xffffffff^state.mask_contact)
     	if ((state.state_current & state.mask_contact)==0)
         {
-    		log.debug "contact sensor is closed"
-    		//door is closed. lights should be off
+    		log.trace "3a current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+			//door is closed. lights should be off
+            log.debug "contact sensor is closed"
+    		//we also ignore the accelerometer at this point
+            state.state_changed=state.state_changed & (0xffffffff^state.mask_accel)
             if (areLightsOn()!=0)
             {
                 log.debug "lights are on, turning off!"
                 turnLightsOff()
-                //we also ignore the accelerometer at this point
-                 state.state_changed=state.state_changed & (0xffffffff^state.mask_accel)
             }
+            log.trace "3b current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+	
         }
         else
         {
         	//door is open...anything here depends on the accelerometer
         	log.debug "contact sensor is open...do nothing"
     	}
-        //clear the change flag
-        state.state_changed=state.state_changed & (0xffffffff^state.mask_contact)
     }
     //if the sun is now up, we turn the lights off if they are on
     if ((state.state_changed & state.mask_sunlight)!=0)//the sunset/sunrise state changed
     {
     	log.debug "sunrise/sunset state change"
+        //clear the change flag
+        state.state_changed=state.state_changed & (0xffffffff^state.mask_sunlight)
     	if ((state.state_current & state.mask_sunlight)!=0)
         {
-    		log.debug "sun is now Up!"
-    		//sun is up. lights should be off
+    		log.trace "3c current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+			//sun is up. lights should be off
+            log.debug "sun is now Up!"
+    		//we also ignore the accelerometer at this point
+            state.state_changed=state.state_changed & (0xffffffff^state.mask_accel)
             if (areLightsOn()!=0)
             {
                 log.debug "lights are on, turning off!"
                 turnLightsOff()
-                //we also ignore the accelerometer at this point
-                state.state_changed=state.state_changed & (0xffffffff^state.mask_accel)
             }
+            log.trace "3d current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
         }
         else
         {
         	//sun is down...anything here depends on the accelerometer
         	log.debug "sun is down...do nothing"
     	}
-        //clear the change flag
-        state.state_changed=state.state_changed & (0xffffffff^state.mask_sunlight)
     }
     //if the acceleration is active (fast door open or close), we turn the lights on if they are off
     if ((state.state_changed & state.mask_accel)!=0)//the accelerometer sensor state changed
     {
+    	log.trace "3e current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
     	log.debug "acceleration state change"
+        //clear the change flag
+        state.state_changed=state.state_changed & (0xffffffff^state.mask_accel)
     	if ((state.state_current & state.mask_accel)!=0 && (state.state_current & state.mask_sunlight)==0)
         {
+    	    log.trace "3f current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
     		log.debug "acceleration sensor is active, sun is down...lights should turn on"
     		if (areLightsOn()==0)
             {
                 log.debug "lights are off, turning on!"
                 turnLightsOn(state.translatedColor.hue, state.translatedColor.saturation, state.translatedColor.level,0)
             }
+            log.trace "3g current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
         }
         else
         {
         	//acceleration is inactive or sun is up...nothing to do
             log.debug "acceleration is inactive or sun is up...do nothing"
         }
-        //clear the change flag
-        state.state_changed=state.state_changed & (0xffffffff^state.mask_accel)
     }
     //if the lights' state changed
     if ((state.state_changed & state.mask_lights)!=0)//the lights' state changed
@@ -300,7 +321,8 @@ private turnLightsOn(hue,saturation,maxlevel,immediate) {
     state.lights_saturation=saturation
     state.lights_maxlevel=maxlevel
     log.debug "turnLightsOn()"
-    
+    log.trace "4 current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+
     //override animation of lights
     if (immediate!=0)
     {
@@ -323,7 +345,7 @@ private turnLightsOn(hue,saturation,maxlevel,immediate) {
 	state.state_current=state.state_current | state.mask_lights
 	state.state_current=state.state_current | state.mask_lights_fade
 	
-    if ((state.state_current & state.mask_lights) != (prevState | state.mask_lights))
+    if ((state.state_current & state.mask_lights) != (prevState & state.mask_lights))
     {
     	log.debug "lights state change"
     	state.state_changed=state.state_changed | state.mask_lights
@@ -334,7 +356,7 @@ private turnLightsOn(hue,saturation,maxlevel,immediate) {
     	state.state_changed=state.state_changed & (0xffffffff^state.mask_lights)
     }
     
-    if ((state.state_current & state.mask_lights_fade) != (prevState | state.mask_lights_fade))
+    if ((state.state_current & state.mask_lights_fade) != (prevState & state.mask_lights_fade))
     {
     	log.debug "lights-fade state change"
     	state.state_changed=state.state_changed | state.mask_lights_fade
@@ -349,6 +371,7 @@ private turnLightsOn(hue,saturation,maxlevel,immediate) {
 }
 private turnLightsOff() {
 	log.debug "turnLightsOff()"
+    log.trace "5 current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
 	hues*.off()
     state.lights_currlevel=0
     
@@ -356,7 +379,7 @@ private turnLightsOff() {
 	state.state_current=state.state_current & (0xffffffff^state.mask_lights)
 	state.state_current=state.state_current & (0xffffffff^state.mask_lights_fade)
 	
-    if ((state.state_current & state.mask_lights) != (prevState | state.mask_lights))
+    if ((state.state_current & state.mask_lights) != (prevState & state.mask_lights))
     {
     	log.debug "lights state change"
     	state.state_changed=state.state_changed | state.mask_lights
@@ -367,7 +390,7 @@ private turnLightsOff() {
     	state.state_changed=state.state_changed & (0xffffffff^state.mask_lights)
     }
     
-    if ((state.state_current & state.mask_lights_fade) != (prevState | state.mask_lights_fade))
+    if ((state.state_current & state.mask_lights_fade) != (prevState & state.mask_lights_fade))
     {
     	log.debug "lights-fade state change"
     	state.state_changed=state.state_changed | state.mask_lights_fade
@@ -383,7 +406,8 @@ private turnLightsOff() {
 
 def locationPositionChange(evt) {
 	log.trace "locationChange()"
-    
+    log.trace "6 current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+
 	def s = getSunriseAndSunset(zipCode: zipCode, sunriseOffset: sunriseOffset, sunsetOffset: sunsetOffset)
 	def curr=now()
     state.riseTime = s.sunrise.time
@@ -393,7 +417,7 @@ def locationPositionChange(evt) {
     else if (curr>=state.riseTime && curr<state.setTime)		state.state_current=state.state_current | state.mask_sunlight
     else														state.state_current=state.state_current & (0xffffffff^state.mask_sunlight)
     
-    if ((state.state_current & state.mask_sunlight) != (prevState | state.mask_sunlight))
+    if ((state.state_current & state.mask_sunlight) != (prevState & state.mask_sunlight))
     {
     	log.debug "sunrise/sunset state change"
     	state.state_changed=state.state_changed | state.mask_sunlight
@@ -407,7 +431,8 @@ def locationPositionChange(evt) {
 }
 def sunriseHandler(evt) {
 	log.trace "sunriseHandler()"
-    
+    log.trace "7 current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+
     if (state.force_night!=0) 
     {
     	log.debug"sunrise occured but we are forcing night for debugging...state remains at night"
@@ -415,7 +440,7 @@ def sunriseHandler(evt) {
     }
     def prevState=state.state_current
 	state.state_current=state.state_current | state.mask_sunlight
-    if ((state.state_current & state.mask_sunlight) != (prevState | state.mask_sunlight)) 
+    if ((state.state_current & state.mask_sunlight) != (prevState & state.mask_sunlight)) 
     {
     	log.debug "sunrise/sunset state change"
     	state.state_changed=state.state_changed | state.mask_sunlight
@@ -429,10 +454,11 @@ def sunriseHandler(evt) {
 }
 def sunsetHandler(evt) {
 	log.trace "sunsetHandler()"
-    
+    log.trace "8 current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+
     def prevState=state.state_current
 	state.state_current=state.state_current & (0xffffffff^state.mask_sunlight)
-    if ((state.state_current & state.mask_sunlight) != (prevState | state.mask_sunlight)) 
+    if ((state.state_current & state.mask_sunlight) != (prevState & state.mask_sunlight)) 
     {
     	log.debug "sunrise/sunset state change"
     	state.state_changed=state.state_changed | state.mask_sunlight
@@ -442,13 +468,20 @@ def sunsetHandler(evt) {
     	log.debug "NO sunrise/sunset state change"
     	state.state_changed=state.state_changed & (0xffffffff^state.mask_sunlight)
     }
-    realizeStateChange()
+    log.trace "8a current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+	realizeStateChange()
+    log.trace "8b current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+
 }
 
 def contactHandler(evt) {
 	log.debug "contactHandler()"
-    
+    log.trace "9 current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+
 	def prevState=state.state_current
+    if ((prevState & state.mask_contact)!=0) log.debug "old contact sensor state is OPEN"
+    else										log.debug "old contact sensor state is CLOSED"
+    
 	if (evt.value == "open") {
 		log.debug "contact sensor is open!"
         state.state_current=state.state_current | state.mask_contact
@@ -457,7 +490,7 @@ def contactHandler(evt) {
 		log.debug "contact sensor is closed!"
 		state.state_current=state.state_current & (0xffffffff^state.mask_contact)
     }
-    if ((state.state_current & state.mask_contact) != (prevState | state.mask_contact)) 
+    if ((state.state_current & state.mask_contact) != (prevState & state.mask_contact)) 
     {
     	log.debug "contact sensor state change"
     	state.state_changed=state.state_changed | state.mask_contact
@@ -467,13 +500,20 @@ def contactHandler(evt) {
     	log.debug "NO contact sensor state change"
     	state.state_changed=state.state_changed & (0xffffffff^state.mask_contact)
     }
-    realizeStateChange()
+    log.trace "9a current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+	realizeStateChange()
+    log.trace "9b current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+
 }
 def accelerationHandler(evt) {
 	log.debug "accelerationHandler()"
-    
+    log.trace "10 current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+
 	def prevState=state.state_current
-	if (evt.value == "active") {
+	if ((prevState & state.mask_accel)!=0) 		log.debug "old accel sensor state is ACTIVE"
+    else										log.debug "old accel sensor state is INACTIVE"
+    
+    if (evt.value == "active") {
 		log.debug "acceleration sensor is active!"
 	    state.state_current=state.state_current | state.mask_accel
 	} 
@@ -482,7 +522,7 @@ def accelerationHandler(evt) {
 		state.state_current=state.state_current & (0xffffffff^state.mask_accel)
 	}
     
-    if ((state.state_current & state.mask_accel) != (prevState | state.mask_accel)) 
+    if ((state.state_current & state.mask_accel) != (prevState & state.mask_accel)) 
     {
     	log.debug "acceleration state change"
     	state.state_changed=state.state_changed | state.mask_accel
@@ -492,8 +532,10 @@ def accelerationHandler(evt) {
     	log.debug "NO acceleration state change"
     	state.state_changed=state.state_changed & (0xffffffff^state.mask_accel)
     }
+    log.trace "10a current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
     realizeStateChange()
-	
+	log.trace "10b current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+
     /*def latestThreeAxisState = multisensor.threeAxisState // e.g.: 0,0,-1000
 	if (latestThreeAxisState) {
 		def isOpen = Math.abs(latestThreeAxisState.xyzValue.z) > 250 // TODO: Test that this value works in most cases...
