@@ -40,17 +40,20 @@ preferences {
 
 def installed()
 {
+	log.debug "installed()"
 	initialize()
 }
 
 def updated()
 {
+	log.debug "updated()"
 	unsubscribe()
 	initialize()
 }
 
 def initialize() 
 {
+	log.debug "initialize()"
 	state.mask_contact		=0x00000001
     state.mask_accel		=0x00000002
     state.mask_lights		=0x00000004
@@ -74,6 +77,7 @@ def initialize()
 }
 
 def areLightsOn() {
+	log.debug "areLightsOn()"
 	def some_on=0
     def some_off=0
     hues.each { hue ->
@@ -268,10 +272,10 @@ def realizeStateChange() {
 }
 
 private translateColor(color, level) {
-	def hueColor = 0
-	def saturation = 100
 	log.debug "translateColor()"
-    
+    def hueColor = 0
+	def saturation = 100
+	
 	switch(color) {
 		case "White":
 			hueColor = 52
@@ -317,10 +321,10 @@ private translateColor(color, level) {
     state.translatedColor=newValue
 }
 private turnLightsOn(hue,saturation,maxlevel,immediate) {
-	state.lights_hue=hue
+	log.debug "turnLightsOn()"
+    state.lights_hue=hue
     state.lights_saturation=saturation
     state.lights_maxlevel=maxlevel
-    log.debug "turnLightsOn()"
     log.trace "4 current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
 
     //override animation of lights
@@ -417,16 +421,16 @@ def locationPositionChange(evt) {
     else if (curr>=state.riseTime && curr<state.setTime)		state.state_current=state.state_current | state.mask_sunlight
     else														state.state_current=state.state_current & (0xffffffff^state.mask_sunlight)
     
-    if ((state.state_current & state.mask_sunlight) != (prevState & state.mask_sunlight))
-    {
+    //if ((state.state_current & state.mask_sunlight) != (prevState & state.mask_sunlight))
+    //{
     	log.debug "sunrise/sunset state change"
     	state.state_changed=state.state_changed | state.mask_sunlight
-  	}
-    else
-	{
-    	log.debug "NO sunrise/sunset state change"
-    	state.state_changed=state.state_changed & (0xffffffff^state.mask_sunlight)
-    }
+  	//}
+    //else
+	//{
+    //	log.debug "NO sunrise/sunset state change"
+    //	state.state_changed=state.state_changed & (0xffffffff^state.mask_sunlight)
+    //}
     realizeStateChange()
 }
 def sunriseHandler(evt) {
@@ -440,17 +444,19 @@ def sunriseHandler(evt) {
     }
     def prevState=state.state_current
 	state.state_current=state.state_current | state.mask_sunlight
-    if ((state.state_current & state.mask_sunlight) != (prevState & state.mask_sunlight)) 
-    {
+    //if ((state.state_current & state.mask_sunlight) != (prevState & state.mask_sunlight)) 
+    //{
     	log.debug "sunrise/sunset state change"
     	state.state_changed=state.state_changed | state.mask_sunlight
-  	} 
-    else
-    {
-		log.debug "NO sunrise/sunset state change"
-    	state.state_changed=state.state_changed & (0xffffffff^state.mask_sunlight)
-	}
-    realizeStateChange()
+  	//} 
+    //else
+    //{
+	//	log.debug "NO sunrise/sunset state change"
+    //	state.state_changed=state.state_changed & (0xffffffff^state.mask_sunlight)
+	//}
+    log.trace "7a current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
+	realizeStateChange()
+	log.trace "7b current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
 }
 def sunsetHandler(evt) {
 	log.trace "sunsetHandler()"
@@ -458,16 +464,16 @@ def sunsetHandler(evt) {
 
     def prevState=state.state_current
 	state.state_current=state.state_current & (0xffffffff^state.mask_sunlight)
-    if ((state.state_current & state.mask_sunlight) != (prevState & state.mask_sunlight)) 
-    {
+    //if ((state.state_current & state.mask_sunlight) != (prevState & state.mask_sunlight)) 
+    //{
     	log.debug "sunrise/sunset state change"
     	state.state_changed=state.state_changed | state.mask_sunlight
-  	}
-    else
-	{
-    	log.debug "NO sunrise/sunset state change"
-    	state.state_changed=state.state_changed & (0xffffffff^state.mask_sunlight)
-    }
+  	//}
+    //else
+	//{
+    //	log.debug "NO sunrise/sunset state change"
+    //	state.state_changed=state.state_changed & (0xffffffff^state.mask_sunlight)
+    //}
     log.trace "8a current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
 	realizeStateChange()
     log.trace "8b current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
@@ -479,7 +485,7 @@ def contactHandler(evt) {
     log.trace "9 current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
 
 	def prevState=state.state_current
-    if ((prevState & state.mask_contact)!=0) log.debug "old contact sensor state is OPEN"
+    if ((prevState & state.mask_contact)!=0) 	log.debug "old contact sensor state is OPEN"
     else										log.debug "old contact sensor state is CLOSED"
     
 	if (evt.value == "open") {
@@ -490,20 +496,19 @@ def contactHandler(evt) {
 		log.debug "contact sensor is closed!"
 		state.state_current=state.state_current & (0xffffffff^state.mask_contact)
     }
-    if ((state.state_current & state.mask_contact) != (prevState & state.mask_contact)) 
-    {
+    //if ((state.state_current & state.mask_contact) != (prevState & state.mask_contact)) 
+    //{
     	log.debug "contact sensor state change"
     	state.state_changed=state.state_changed | state.mask_contact
-  	}
-    else
-	{
-    	log.debug "NO contact sensor state change"
-    	state.state_changed=state.state_changed & (0xffffffff^state.mask_contact)
-    }
+  	//}
+    //else
+	//{
+    //	log.debug "NO contact sensor state change"
+    //	state.state_changed=state.state_changed & (0xffffffff^state.mask_contact)
+    //}
     log.trace "9a current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
 	realizeStateChange()
     log.trace "9b current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
-
 }
 def accelerationHandler(evt) {
 	log.debug "accelerationHandler()"
@@ -522,16 +527,16 @@ def accelerationHandler(evt) {
 		state.state_current=state.state_current & (0xffffffff^state.mask_accel)
 	}
     
-    if ((state.state_current & state.mask_accel) != (prevState & state.mask_accel)) 
-    {
+    //if ((state.state_current & state.mask_accel) != (prevState & state.mask_accel)) 
+    //{
     	log.debug "acceleration state change"
     	state.state_changed=state.state_changed | state.mask_accel
-  	}
-    else
-	{
-    	log.debug "NO acceleration state change"
-    	state.state_changed=state.state_changed & (0xffffffff^state.mask_accel)
-    }
+  	//}
+    //else
+	//{
+    //	log.debug "NO acceleration state change"
+    //	state.state_changed=state.state_changed & (0xffffffff^state.mask_accel)
+    //}
     log.trace "10a current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
     realizeStateChange()
 	log.trace "10b current state is ${state.state_current} and current change flag vector is ${state.state_changed}"
